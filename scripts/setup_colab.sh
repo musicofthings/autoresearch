@@ -2,11 +2,9 @@
 set -euo pipefail
 
 # Colab reliability mode:
-# - default USE_VENV=0 to avoid interpreter mismatch (most common torch error cause)
-# - set USE_VENV=1 if you explicitly want isolated deps in .venv
+# - default USE_VENV=0 to avoid interpreter mismatch
+# - set USE_VENV=1 for isolated deps in .venv
 USE_VENV="${USE_VENV:-0}"
-
-# Always set a fallback runner early so callers can proceed even if setup fails midway.
 RUN_PYTHON="python"
 echo "${RUN_PYTHON}" > .run_python
 
@@ -23,37 +21,32 @@ if [ "${USE_VENV}" = "1" ]; then
   echo "${RUN_PYTHON}" > .run_python
   "${RUN_PYTHON}" -m ensurepip --upgrade >/dev/null 2>&1 || true
   uv pip install --python "${RUN_PYTHON}" --upgrade pip
-  uv pip install --python "${RUN_PYTHON}" torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-  uv pip install --python "${RUN_PYTHON}" "fair-esm[esmfold]" biopython
-else
-  # Prefer Colab's preinstalled torch, but install it if missing.
-  if "${RUN_PYTHON}" -c "import torch" >/dev/null 2>&1; then
-    echo "ℹ️ torch already available in ${RUN_PYTHON}"
-  else
-    echo "ℹ️ torch not found; installing torch/torchvision/torchaudio"
-    "${RUN_PYTHON}" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-  fi
-
-  "${RUN_PYTHON}" -m pip install "fair-esm[esmfold]" biopython
 fi
 
-# ESMFold requires openfold at runtime in some environments.
-if "${RUN_PYTHON}" -c "import openfold" >/dev/null 2>&1; then
-  echo "ℹ️ openfold already available in ${RUN_PYTHON}"
+# Core runtime deps
+if "${RUN_PYTHON}" -c "import torch" >/dev/null 2>&1; then
+  echo "ℹ️ torch already available in ${RUN_PYTHON}"
 else
-  echo "ℹ️ openfold not found; attempting installation"
-  if ! "${RUN_PYTHON}" -m pip install openfold >/dev/null 2>&1; then
-    "${RUN_PYTHON}" -m pip install "openfold @ git+https://github.com/aqlaboratory/openfold.git"
-  fi
+  "${RUN_PYTHON}" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 fi
 
-# Verify runtime imports from the same interpreter that will execute evolve_glp1.py
+# ESMFold official dependency path
+"${RUN_PYTHON}" -m pip install "fair-esm[esmfold]" biopython
+"${RUN_PYTHON}" -m pip install "dllogger @ git+https://github.com/NVIDIA/dllogger.git"
+if ! "${RUN_PYTHON}" -m pip install "openfold @ git+https://github.com/aqlaboratory/openfold.git@4b41059694619831a7db195b7e0988fc4ff3a307"; then
+  # Fallback to head if pinned commit fails in environment
+  "${RUN_PYTHON}" -m pip install "openfold @ git+https://github.com/aqlaboratory/openfold.git"
+fi
+
+# Verify imports from same interpreter used for run
 "${RUN_PYTHON}" - <<'PY'
 import sys
 import torch
+import esm
 import openfold
 print(f"✅ python executable: {sys.executable}")
 print(f"✅ torch import ok ({torch.__version__})")
+print(f"✅ esm import ok ({getattr(esm, '__version__', 'unknown')})")
 print(f"✅ openfold import ok ({getattr(openfold, '__version__', 'unknown')})")
 print(f"✅ cuda available: {torch.cuda.is_available()}")
 PY

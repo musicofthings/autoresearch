@@ -11,6 +11,7 @@ torch = None
 device = None
 model = None
 MODEL_MODE = "unknown"
+ALLOW_HEURISTIC_FALLBACK = True
 
 HYDROPHOBIC = set("AILMFWVY")
 CHARGED = set("DEKRH")
@@ -57,17 +58,24 @@ def get_model():
     try:
         import esm
     except ModuleNotFoundError as exc:
-        if getattr(exc, "name", "") == "openfold":
+        missing = getattr(exc, "name", "unknown")
+        if ALLOW_HEURISTIC_FALLBACK:
             MODEL_MODE = "heuristic"
             print(
-                "⚠️ openfold not available; falling back to heuristic scoring mode. "
-                "Run scripts/setup_colab.sh to install openfold for full ESMFold mode."
+                f"⚠️ Missing dependency '{missing}' for ESMFold; falling back to heuristic scoring mode. "
+                "Use setup_colab.sh to install full ESMFold dependencies."
             )
             return None
         raise SystemExit(
-            "Missing dependency: fair-esm with ESMFold. Install with: "
-            "uv pip install \"fair-esm[esmfold]\""
+            f"Missing ESMFold dependency: {missing}\n"
+            "Run:\n"
+            "  bash scripts/setup_colab.sh\n"
+            "Or manually install:\n"
+            "  pip install \"fair-esm[esmfold]\"\n"
+            "  pip install \"dllogger @ git+https://github.com/NVIDIA/dllogger.git\"\n"
+            "  pip install \"openfold @ git+https://github.com/aqlaboratory/openfold.git@4b41059694619831a7db195b7e0988fc4ff3a307\""
         ) from exc
+
 
     get_torch()
     loaded = esm.pretrained.esmfold_v1()
@@ -205,6 +213,11 @@ def parse_args():
         help="Disable git commits during evolution (recommended for quick Colab smoke tests).",
     )
     parser.add_argument("--seed", type=int, default=1337, help="Random seed for reproducibility.")
+    parser.add_argument(
+        "--strict-esmfold",
+        action="store_true",
+        help="Fail if ESMFold dependencies are missing instead of heuristic fallback.",
+    )
     return parser.parse_args()
 
 
@@ -212,6 +225,8 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     random.seed(args.seed)
+
+    ALLOW_HEURISTIC_FALLBACK = not args.strict_esmfold
 
     state = load_state(args.state_file)
     best_seq = state.get("best_seq", CURRENT_SEQ)

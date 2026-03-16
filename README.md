@@ -63,7 +63,7 @@ $(cat .run_python 2>/dev/null || echo python) evolve_glp1.py --experiments 100 -
 
 - A CUDA GPU is strongly recommended for practical ESMFold throughput.
 - The script prints clear install guidance if `torch`, `openfold`, or `fair-esm[esmfold]` is missing.
-- If `openfold` remains unavailable, `evolve_glp1.py` automatically falls back to heuristic scoring mode (`Predictor=heuristic`) so runs can proceed.
+- If ESMFold dependencies (`fair-esm`, `openfold`) remain unavailable, `evolve_glp1.py` automatically falls back to heuristic scoring mode (`Predictor=heuristic`) so runs can proceed. Use `--strict-esmfold` to fail instead of fallback.
 
 ## License
 

@@ -110,5 +110,6 @@ This wrapper script handles:
 - If you see `.venv/bin/python: No module named pip`, either rerun `!USE_VENV=1 bash scripts/setup_colab.sh` or use default non-venv mode (`!bash scripts/setup_colab.sh`).
 - If you see `Missing dependency: torch`, make sure you run with `!$(cat .run_python 2>/dev/null || echo python) ...` and rerun setup.
 - If you see `ModuleNotFoundError: No module named 'openfold'`, rerun `!bash scripts/setup_colab.sh`; setup now installs and verifies openfold.
-- If openfold still cannot be installed in your runtime, `evolve_glp1.py` now falls back to heuristic scoring mode so experiments can continue (metrics will show `Predictor=heuristic`).
+- If you see `ModuleNotFoundError: No module named 'esm'`, rerun setup to install `fair-esm[esmfold]`; runner can continue in heuristic mode if unavailable.
+- If ESMFold dependencies (`fair-esm`, `openfold`) still cannot be installed in your runtime, `evolve_glp1.py` falls back to heuristic scoring mode so experiments can continue (metrics will show `Predictor=heuristic`). Use `--strict-esmfold` if you prefer hard failure.
 - If CUDA is unavailable, verify runtime type is GPU and restart the Colab runtime.

@@ -25,12 +25,24 @@ Use the full guide in `docs/glp1_colab_option1.md`. Minimal flow:
 !rm -rf /content/autoresearch
 !git clone https://github.com/YOUR_USERNAME/autoresearch.git /content/autoresearch
 %cd /content/autoresearch
-!git checkout glp1-evolution
+!git fetch --all --prune
+!if git show-ref --verify --quiet refs/remotes/origin/glp1-evolution; then git checkout glp1-evolution; else echo "branch glp1-evolution not found, staying on default branch"; fi
 !bash scripts/setup_colab.sh
 !.venv/bin/python evolve_glp1.py --experiments 10 --no-git-commit
 ```
 
 For longer runs, keep the default `--state-file runs/glp1_state.json` so reconnects can resume from the last completed experiment.
+
+
+### One-command Colab bootstrap (recommended when setup keeps looping)
+
+```bash
+!git clone https://github.com/YOUR_USERNAME/autoresearch.git /content/autoresearch
+%cd /content/autoresearch
+!EXPERIMENTS=10 bash scripts/colab_bootstrap_and_run.sh
+```
+
+This command avoids the common Colab loop (wrong cwd, missing branch, torch installed outside `.venv`, then runtime import failures).
 
 ## Local run (GPU machine)
 

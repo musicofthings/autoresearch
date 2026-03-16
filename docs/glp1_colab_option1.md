@@ -7,14 +7,21 @@ This repo includes a Colab-first workflow so you can run `evolve_glp1.py` on a f
 2. Create a new notebook.
 3. Set **Runtime → Change runtime type → GPU** (T4 on free tier is fine).
 
-## 2) Clone repo and switch branch
+## 2) Clone repo
 > If you rerun cells often, use absolute paths and remove existing folder first to avoid nested `autoresearch/autoresearch/...` directories.
 
 ```bash
 !rm -rf /content/autoresearch
 !git clone https://github.com/YOUR_USERNAME/autoresearch.git /content/autoresearch
 %cd /content/autoresearch
-!git checkout glp1-evolution
+```
+
+### Optional: checkout a branch only if it exists
+The previous `pathspec ... did not match` error happens when the branch name is not present in that remote.
+
+```bash
+!git fetch --all --prune
+!if git show-ref --verify --quiet refs/remotes/origin/glp1-evolution; then git checkout glp1-evolution; else echo "branch glp1-evolution not found, staying on default branch"; fi
 ```
 
 ## 3) Install dependencies
@@ -50,7 +57,7 @@ The script persists progress in `runs/glp1_state.json`; rerun with same `--state
 !git config --global user.name "Your Name"
 !git add .
 !git commit -m "Colab checkpoint"
-!git push origin glp1-evolution
+!git push origin HEAD
 ```
 
 ## Single-cell quickstart
@@ -58,11 +65,40 @@ The script persists progress in `runs/glp1_state.json`; rerun with same `--state
 !rm -rf /content/autoresearch
 !git clone https://github.com/YOUR_USERNAME/autoresearch.git /content/autoresearch
 %cd /content/autoresearch
-!git checkout glp1-evolution
+!git fetch --all --prune
+!if git show-ref --verify --quiet refs/remotes/origin/glp1-evolution; then git checkout glp1-evolution; else echo "branch glp1-evolution not found, staying on default branch"; fi
 !bash scripts/setup_colab.sh
 !.venv/bin/python evolve_glp1.py --experiments 20 --no-git-commit
 ```
 
+
+## Fastest fix for feedback-loop setup failures
+If Colab keeps failing due to cwd issues, missing branches, or torch not found, run this minimal sequence:
+
+```bash
+!rm -rf /content/autoresearch
+!git clone https://github.com/YOUR_USERNAME/autoresearch.git /content/autoresearch
+%cd /content/autoresearch
+!EXPERIMENTS=10 bash scripts/colab_bootstrap_and_run.sh
+```
+
+Or if already cloned:
+
+```bash
+%cd /content/autoresearch
+!EXPERIMENTS=10 bash scripts/colab_bootstrap_and_run.sh
+```
+
+This wrapper script handles:
+- `cd /content` before clone
+- safe clone into `/content/autoresearch`
+- branch fallback (`glp1-evolution` -> `codex/set-up-peptide-evolution-lab-using-autoresearch` -> default)
+- dependency setup in `.venv`
+- explicit interpreter checks (`.venv/bin/python`, `torch`, CUDA)
+- starting `evolve_glp1.py` with the same venv interpreter
+
 ## Troubleshooting
-- If you see `Missing dependency: torch`, rerun `!bash scripts/setup_colab.sh` and use `!.venv/bin/python ...` to run commands.
-- If CUDA is unavailable, verify Colab runtime type is set to GPU and restart runtime.
+- If you see `pathspec 'glp1-evolution' did not match`, remove/skip hardcoded branch checkout or use the conditional checkout snippet above.
+- If you see `.venv/bin/python: No module named pip`, rerun `!bash scripts/setup_colab.sh` (script now bootstraps pip in `.venv`).
+- If you see `Missing dependency: torch`, make sure you run with `!.venv/bin/python ...`.
+- If CUDA is unavailable, verify runtime type is GPU and restart the Colab runtime.

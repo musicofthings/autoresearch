@@ -11,6 +11,7 @@ This repo includes a Colab-first workflow so you can run `evolve_glp1.py` on a f
 > If you rerun cells often, use absolute paths and remove existing folder first to avoid nested `autoresearch/autoresearch/...` directories.
 
 ```bash
+%cd /content
 !rm -rf /content/autoresearch
 !git clone https://github.com/musicofthings/autoresearch.git /content/autoresearch
 %cd /content/autoresearch
@@ -63,6 +64,7 @@ The script persists progress in `runs/glp1_state.json`; rerun with same `--state
 
 ## Single-cell quickstart
 ```python
+%cd /content
 !rm -rf /content/autoresearch
 !git clone https://github.com/musicofthings/autoresearch.git /content/autoresearch
 %cd /content/autoresearch
@@ -78,6 +80,7 @@ The script persists progress in `runs/glp1_state.json`; rerun with same `--state
 If Colab keeps failing due to cwd issues, missing branches, or torch not found, run this minimal sequence:
 
 ```bash
+%cd /content
 !rm -rf /content/autoresearch
 !git clone https://github.com/musicofthings/autoresearch.git /content/autoresearch
 %cd /content/autoresearch
@@ -100,6 +103,7 @@ This wrapper script handles:
 - starting `evolve_glp1.py` with the same venv interpreter
 
 ## Troubleshooting
+- If you hit `getcwd`/`Unable to read current working directory` errors, run the recovery block in `docs/colab_recovery_snippet.md` starting with `%cd /content`.
 - If you see `pathspec 'glp1-evolution' did not match`, remove/skip hardcoded branch checkout or use the conditional checkout snippet above.
 - If you see `.venv/bin/python: No module named pip`, rerun `!bash scripts/setup_colab.sh` (script now bootstraps pip in `.venv`).
 - If you see `Missing dependency: torch`, make sure you run with `!.venv/bin/python ...`.

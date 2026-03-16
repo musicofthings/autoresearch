@@ -22,6 +22,7 @@ This repository is focused on one purpose: running autonomous, iterative **GLP-1
 Use the full guide in `docs/glp1_colab_option1.md`. Minimal flow:
 
 ```bash
+%cd /content
 !rm -rf /content/autoresearch
 !git clone https://github.com/musicofthings/autoresearch.git /content/autoresearch
 %cd /content/autoresearch
@@ -38,12 +39,16 @@ For longer runs, keep the default `--state-file runs/glp1_state.json` so reconne
 ### One-command Colab bootstrap (recommended when setup keeps looping)
 
 ```bash
+%cd /content
+!rm -rf /content/autoresearch
 !git clone https://github.com/musicofthings/autoresearch.git /content/autoresearch
 %cd /content/autoresearch
 !EXPERIMENTS=10 bash scripts/colab_bootstrap_and_run.sh
 ```
 
 This command avoids the common Colab loop (wrong cwd, missing branch, torch installed outside `.venv`, then runtime import failures).
+
+If your notebook is already in a broken cwd state (`getcwd` errors), run the recovery block in `docs/colab_recovery_snippet.md`.
 
 ## Local run (GPU machine)
 

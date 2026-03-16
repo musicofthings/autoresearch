@@ -49,6 +49,25 @@ Hi have a look at program.md and let's kick off a new experiment! let's do the s
 
 The `program.md` file is essentially a super lightweight "skill".
 
+## GLP-1 Colab runtime (Option 1)
+
+If you're using this repo in GLP-1 peptide evolution mode (`evolve_glp1.py`), the fastest way to run with a GPU is Google Colab.
+
+- End-to-end setup instructions: `docs/glp1_colab_option1.md`
+- Colab installer helper: `scripts/setup_colab.sh`
+
+Minimal sequence:
+
+```bash
+git clone https://github.com/YOUR_USERNAME/autoresearch.git
+cd autoresearch
+git checkout glp1-evolution
+bash scripts/setup_colab.sh
+source .venv/bin/activate && python evolve_glp1.py --experiments 10 --no-git-commit
+```
+
+For unattended runs and reconnect safety, use `--state-file runs/glp1_state.json` (default path) so the loop resumes from last completed experiment.
+
 ## Project structure
 
 ```

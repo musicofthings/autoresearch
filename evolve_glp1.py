@@ -57,17 +57,23 @@ def get_model():
         return model
     try:
         import esm
-    except ModuleNotFoundError as exc:
-        missing = getattr(exc, "name", "unknown")
+        get_torch()
+        loaded = esm.pretrained.esmfold_v1()
+        loaded = loaded.eval().to(device)
+        model = loaded
+        MODEL_MODE = "esmfold"
+        return model
+    except Exception as exc:
+        missing = getattr(exc, "name", exc.__class__.__name__)
         if ALLOW_HEURISTIC_FALLBACK:
             MODEL_MODE = "heuristic"
             print(
-                f"⚠️ Missing dependency '{missing}' for ESMFold; falling back to heuristic scoring mode. "
+                f"⚠️ ESMFold unavailable ({missing}: {exc}); falling back to heuristic scoring mode. "
                 "Use setup_colab.sh to install full ESMFold dependencies."
             )
             return None
         raise SystemExit(
-            f"Missing ESMFold dependency: {missing}\n"
+            f"ESMFold initialization failed ({missing}: {exc})\n"
             "Run:\n"
             "  bash scripts/setup_colab.sh\n"
             "Or manually install:\n"
@@ -75,14 +81,6 @@ def get_model():
             "  pip install \"dllogger @ git+https://github.com/NVIDIA/dllogger.git\"\n"
             "  pip install \"openfold @ git+https://github.com/aqlaboratory/openfold.git@4b41059694619831a7db195b7e0988fc4ff3a307\""
         ) from exc
-
-
-    get_torch()
-    loaded = esm.pretrained.esmfold_v1()
-    loaded = loaded.eval().to(device)
-    model = loaded
-    MODEL_MODE = "esmfold"
-    return model
 
 
 

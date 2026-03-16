@@ -30,12 +30,12 @@ Use the full guide in `docs/glp1_colab_option1.md`. Minimal flow:
 !if git show-ref --verify --quiet refs/remotes/origin/glp1-evolution; then git checkout glp1-evolution; elif git show-ref --verify --quiet refs/remotes/origin/codex/set-up-peptide-evolution-lab-using-autoresearch; then git checkout codex/set-up-peptide-evolution-lab-using-autoresearch; else echo "no GLP-1 branch found; staying on default branch"; fi
 !test -f evolve_glp1.py || (echo "evolve_glp1.py not found on this branch" && git branch -a && false)
 !bash scripts/setup_colab.sh
-!$(cat .run_python) evolve_glp1.py --experiments 10 --no-git-commit
+!$(cat .run_python 2>/dev/null || echo python) evolve_glp1.py --experiments 10 --no-git-commit
 ```
 
 For longer runs, keep the default `--state-file runs/glp1_state.json` so reconnects can resume from the last completed experiment.
 
-`setup_colab.sh` writes the interpreter to `.run_python`; use `$(cat .run_python)` for all runs. Default mode uses Colab system Python for reliability. Set `USE_VENV=1` only if you specifically need an isolated venv.
+`setup_colab.sh` writes the interpreter to `.run_python`; use `$(cat .run_python 2>/dev/null || echo python)` for all runs. Default mode uses Colab system Python for reliability. Set `USE_VENV=1` only if you specifically need an isolated venv. If `.run_python` is ever missing, the fallback still runs with `python`.
 
 
 ### One-command Colab bootstrap (recommended when setup keeps looping)
@@ -56,7 +56,7 @@ If your notebook is already in a broken cwd state (`getcwd` errors), run the rec
 
 ```bash
 USE_VENV=1 bash scripts/setup_colab.sh
-$(cat .run_python) evolve_glp1.py --experiments 100 --state-file runs/glp1_state.json
+$(cat .run_python 2>/dev/null || echo python) evolve_glp1.py --experiments 100 --state-file runs/glp1_state.json
 ```
 
 ## Notes

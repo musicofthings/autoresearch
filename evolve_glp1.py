@@ -10,6 +10,10 @@ from pathlib import Path
 torch = None
 device = None
 model = None
+MODEL_MODE = "unknown"
+
+HYDROPHOBIC = set("AILMFWVY")
+CHARGED = set("DEKRH")
 
 CURRENT_SEQ = "HAEGTFTSDVSSYLEGQAAKEFIAWLVRGRG"  # semaglutide-like backbone (best starter)
 
@@ -47,17 +51,19 @@ def get_torch():
 
 
 def get_model():
-    global model
+    global model, MODEL_MODE
     if model is not None:
         return model
     try:
         import esm
     except ModuleNotFoundError as exc:
         if getattr(exc, "name", "") == "openfold":
-            raise SystemExit(
-                "Missing dependency: openfold (required by ESMFold). Install with: "
-                "pip install openfold || pip install \"openfold @ git+https://github.com/aqlaboratory/openfold.git\""
-            ) from exc
+            MODEL_MODE = "heuristic"
+            print(
+                "⚠️ openfold not available; falling back to heuristic scoring mode. "
+                "Run scripts/setup_colab.sh to install openfold for full ESMFold mode."
+            )
+            return None
         raise SystemExit(
             "Missing dependency: fair-esm with ESMFold. Install with: "
             "uv pip install \"fair-esm[esmfold]\""
@@ -67,6 +73,7 @@ def get_model():
     loaded = esm.pretrained.esmfold_v1()
     loaded = loaded.eval().to(device)
     model = loaded
+    MODEL_MODE = "esmfold"
     return model
 
 
@@ -75,12 +82,40 @@ def approx_aib(seq: str) -> str:
     return seq.replace("[Aib]", "A").replace("X", "A")
 
 
+
+
+def run_heuristic(sequence: str):
+    start = time.time()
+    seq_clean = approx_aib(sequence)
+    length = max(len(seq_clean), 1)
+    hydrophobic_frac = sum(aa in HYDROPHOBIC for aa in seq_clean) / length
+    charged_frac = sum(aa in CHARGED for aa in seq_clean) / length
+    gly_pro_frac = sum(aa in {"G", "P"} for aa in seq_clean) / length
+
+    avg_plddt = 65 + 20 * hydrophobic_frac - 8 * gly_pro_frac
+    helix_plddt = 62 + 18 * hydrophobic_frac - 10 * gly_pro_frac
+    # lower is better; keep in a plausible range
+    interface_pae = 22 - 6 * charged_frac + 4 * gly_pro_frac
+
+    runtime = time.time() - start
+    return {
+        "avg_plddt": float(max(20, min(95, avg_plddt))),
+        "helix_plddt": float(max(20, min(95, helix_plddt))),
+        "interface_pae": float(max(1, min(35, interface_pae))),
+        "runtime_sec": runtime,
+        "predictor": "heuristic",
+    }
+
+
 def run_esmfold(sequence: str):
     start = time.time()
     seq_clean = approx_aib(sequence)
 
-    torch_module = get_torch()
     local_model = get_model()
+    if local_model is None:
+        return run_heuristic(seq_clean)
+
+    torch_module = get_torch()
 
     # Monomer prediction
     with torch_module.no_grad():
@@ -106,6 +141,7 @@ def run_esmfold(sequence: str):
         "helix_plddt": helix_plddt,
         "interface_pae": interface_pae,
         "runtime_sec": runtime,
+        "predictor": "esmfold",
     }
 
 
@@ -201,7 +237,8 @@ if __name__ == "__main__":
             f"pLDDT={metrics['avg_plddt']:.1f} | "
             f"Helix={metrics['helix_plddt']:.1f} | "
             f"PAE={metrics['interface_pae']:.1f} | "
-            f"Time={metrics['runtime_sec']:.1f}s"
+            f"Time={metrics['runtime_sec']:.1f}s | "
+            f"Predictor={metrics.get('predictor','unknown')}"
         )
         print(f"Score: {score:.4f} (best so far: {best_score:.4f})")
 

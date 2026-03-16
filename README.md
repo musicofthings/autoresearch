@@ -22,11 +22,12 @@ This repository is focused on one purpose: running autonomous, iterative **GLP-1
 Use the full guide in `docs/glp1_colab_option1.md`. Minimal flow:
 
 ```bash
-!git clone https://github.com/YOUR_USERNAME/autoresearch.git
-%cd autoresearch
+!rm -rf /content/autoresearch
+!git clone https://github.com/YOUR_USERNAME/autoresearch.git /content/autoresearch
+%cd /content/autoresearch
 !git checkout glp1-evolution
 !bash scripts/setup_colab.sh
-!source .venv/bin/activate && python evolve_glp1.py --experiments 10 --no-git-commit
+!.venv/bin/python evolve_glp1.py --experiments 10 --no-git-commit
 ```
 
 For longer runs, keep the default `--state-file runs/glp1_state.json` so reconnects can resume from the last completed experiment.
@@ -35,8 +36,7 @@ For longer runs, keep the default `--state-file runs/glp1_state.json` so reconne
 
 ```bash
 bash scripts/setup_colab.sh
-source .venv/bin/activate
-python evolve_glp1.py --experiments 100 --state-file runs/glp1_state.json
+.venv/bin/python evolve_glp1.py --experiments 100 --state-file runs/glp1_state.json
 ```
 
 ## Notes

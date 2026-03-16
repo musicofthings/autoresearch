@@ -1,12 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Use notebook Python for uv bootstrap, then install all runtime deps directly
+# into .venv to avoid accidental system-site installs.
 python -m pip install --upgrade pip
-python -m pip install uv
-uv venv .venv
-source .venv/bin/activate
-uv pip install --upgrade pip
-uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-uv pip install "fair-esm[esmfold]" biopython
+python -m pip install --upgrade uv
 
-echo "✅ Colab environment setup complete. Activate with: source .venv/bin/activate"
+if [ -d ".venv" ]; then
+  echo "ℹ️ Reusing existing .venv"
+else
+  uv venv .venv --python 3.10
+fi
+
+VENV_PYTHON=".venv/bin/python"
+"${VENV_PYTHON}" -m pip install --upgrade pip
+"${VENV_PYTHON}" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+"${VENV_PYTHON}" -m pip install "fair-esm[esmfold]" biopython
+
+"${VENV_PYTHON}" - <<'PY'
+import torch
+print(f"✅ torch import ok ({torch.__version__})")
+print(f"✅ cuda available: {torch.cuda.is_available()}")
+PY
+
+echo "✅ Colab environment setup complete. Run with: .venv/bin/python evolve_glp1.py --experiments 10 --no-git-commit"

@@ -26,16 +26,35 @@ if [ "${USE_VENV}" = "1" ]; then
   uv pip install --python "${RUN_PYTHON}" torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
   uv pip install --python "${RUN_PYTHON}" "fair-esm[esmfold]" biopython
 else
-  # Colab already ships torch; keep this idempotent and only add missing deps.
+  # Prefer Colab's preinstalled torch, but install it if missing.
+  if "${RUN_PYTHON}" -c "import torch" >/dev/null 2>&1; then
+    echo "ℹ️ torch already available in ${RUN_PYTHON}"
+  else
+    echo "ℹ️ torch not found; installing torch/torchvision/torchaudio"
+    "${RUN_PYTHON}" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+  fi
+
   "${RUN_PYTHON}" -m pip install "fair-esm[esmfold]" biopython
+fi
+
+# ESMFold requires openfold at runtime in some environments.
+if "${RUN_PYTHON}" -c "import openfold" >/dev/null 2>&1; then
+  echo "ℹ️ openfold already available in ${RUN_PYTHON}"
+else
+  echo "ℹ️ openfold not found; attempting installation"
+  if ! "${RUN_PYTHON}" -m pip install openfold >/dev/null 2>&1; then
+    "${RUN_PYTHON}" -m pip install "openfold @ git+https://github.com/aqlaboratory/openfold.git"
+  fi
 fi
 
 # Verify runtime imports from the same interpreter that will execute evolve_glp1.py
 "${RUN_PYTHON}" - <<'PY'
 import sys
 import torch
+import openfold
 print(f"✅ python executable: {sys.executable}")
 print(f"✅ torch import ok ({torch.__version__})")
+print(f"✅ openfold import ok ({getattr(openfold, '__version__', 'unknown')})")
 print(f"✅ cuda available: {torch.cuda.is_available()}")
 PY
 

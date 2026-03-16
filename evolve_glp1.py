@@ -53,6 +53,11 @@ def get_model():
     try:
         import esm
     except ModuleNotFoundError as exc:
+        if getattr(exc, "name", "") == "openfold":
+            raise SystemExit(
+                "Missing dependency: openfold (required by ESMFold). Install with: "
+                "pip install openfold || pip install \"openfold @ git+https://github.com/aqlaboratory/openfold.git\""
+            ) from exc
         raise SystemExit(
             "Missing dependency: fair-esm with ESMFold. Install with: "
             "uv pip install \"fair-esm[esmfold]\""

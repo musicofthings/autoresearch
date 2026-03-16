@@ -35,7 +35,7 @@ Use the full guide in `docs/glp1_colab_option1.md`. Minimal flow:
 
 For longer runs, keep the default `--state-file runs/glp1_state.json` so reconnects can resume from the last completed experiment.
 
-`setup_colab.sh` writes the interpreter to `.run_python`; use `$(cat .run_python 2>/dev/null || echo python)` for all runs. Default mode uses Colab system Python for reliability. Set `USE_VENV=1` only if you specifically need an isolated venv. If `.run_python` is ever missing, the fallback still runs with `python`.
+`setup_colab.sh` writes the interpreter to `.run_python`; use `$(cat .run_python 2>/dev/null || echo python)` for all runs. Default mode uses Colab system Python for reliability and auto-installs `torch` and `openfold` if missing. Set `USE_VENV=1` only if you specifically need an isolated venv. If `.run_python` is ever missing, the fallback still runs with `python`.
 
 
 ### One-command Colab bootstrap (recommended when setup keeps looping)
@@ -62,7 +62,7 @@ $(cat .run_python 2>/dev/null || echo python) evolve_glp1.py --experiments 100 -
 ## Notes
 
 - A CUDA GPU is strongly recommended for practical ESMFold throughput.
-- The script prints clear install guidance if `torch` or `fair-esm[esmfold]` is missing.
+- The script prints clear install guidance if `torch`, `openfold`, or `fair-esm[esmfold]` is missing.
 
 ## License
 

@@ -23,10 +23,11 @@ Use the full guide in `docs/glp1_colab_option1.md`. Minimal flow:
 
 ```bash
 !rm -rf /content/autoresearch
-!git clone https://github.com/YOUR_USERNAME/autoresearch.git /content/autoresearch
+!git clone https://github.com/musicofthings/autoresearch.git /content/autoresearch
 %cd /content/autoresearch
 !git fetch --all --prune
-!if git show-ref --verify --quiet refs/remotes/origin/glp1-evolution; then git checkout glp1-evolution; else echo "branch glp1-evolution not found, staying on default branch"; fi
+!if git show-ref --verify --quiet refs/remotes/origin/glp1-evolution; then git checkout glp1-evolution; elif git show-ref --verify --quiet refs/remotes/origin/codex/set-up-peptide-evolution-lab-using-autoresearch; then git checkout codex/set-up-peptide-evolution-lab-using-autoresearch; else echo "no GLP-1 branch found; staying on default branch"; fi
+!test -f evolve_glp1.py || (echo "evolve_glp1.py not found on this branch" && git branch -a && false)
 !bash scripts/setup_colab.sh
 !.venv/bin/python evolve_glp1.py --experiments 10 --no-git-commit
 ```
@@ -37,7 +38,7 @@ For longer runs, keep the default `--state-file runs/glp1_state.json` so reconne
 ### One-command Colab bootstrap (recommended when setup keeps looping)
 
 ```bash
-!git clone https://github.com/YOUR_USERNAME/autoresearch.git /content/autoresearch
+!git clone https://github.com/musicofthings/autoresearch.git /content/autoresearch
 %cd /content/autoresearch
 !EXPERIMENTS=10 bash scripts/colab_bootstrap_and_run.sh
 ```

@@ -12,16 +12,17 @@ This repo includes a Colab-first workflow so you can run `evolve_glp1.py` on a f
 
 ```bash
 !rm -rf /content/autoresearch
-!git clone https://github.com/YOUR_USERNAME/autoresearch.git /content/autoresearch
+!git clone https://github.com/musicofthings/autoresearch.git /content/autoresearch
 %cd /content/autoresearch
 ```
 
-### Optional: checkout a branch only if it exists
-The previous `pathspec ... did not match` error happens when the branch name is not present in that remote.
+### Checkout a GLP-1 branch if present
+The previous `pathspec ... did not match` error happens when the branch name is not present in that remote. This snippet tries both known branch names and fails early if `evolve_glp1.py` is missing.
 
 ```bash
 !git fetch --all --prune
-!if git show-ref --verify --quiet refs/remotes/origin/glp1-evolution; then git checkout glp1-evolution; else echo "branch glp1-evolution not found, staying on default branch"; fi
+!if git show-ref --verify --quiet refs/remotes/origin/glp1-evolution; then git checkout glp1-evolution; elif git show-ref --verify --quiet refs/remotes/origin/codex/set-up-peptide-evolution-lab-using-autoresearch; then git checkout codex/set-up-peptide-evolution-lab-using-autoresearch; else echo "no GLP-1 branch found; staying on default branch"; fi
+!test -f evolve_glp1.py || (echo "evolve_glp1.py not found on this branch" && git branch -a && false)
 ```
 
 ## 3) Install dependencies
@@ -63,10 +64,11 @@ The script persists progress in `runs/glp1_state.json`; rerun with same `--state
 ## Single-cell quickstart
 ```python
 !rm -rf /content/autoresearch
-!git clone https://github.com/YOUR_USERNAME/autoresearch.git /content/autoresearch
+!git clone https://github.com/musicofthings/autoresearch.git /content/autoresearch
 %cd /content/autoresearch
 !git fetch --all --prune
-!if git show-ref --verify --quiet refs/remotes/origin/glp1-evolution; then git checkout glp1-evolution; else echo "branch glp1-evolution not found, staying on default branch"; fi
+!if git show-ref --verify --quiet refs/remotes/origin/glp1-evolution; then git checkout glp1-evolution; elif git show-ref --verify --quiet refs/remotes/origin/codex/set-up-peptide-evolution-lab-using-autoresearch; then git checkout codex/set-up-peptide-evolution-lab-using-autoresearch; else echo "no GLP-1 branch found; staying on default branch"; fi
+!test -f evolve_glp1.py || (echo "evolve_glp1.py not found on this branch" && git branch -a && false)
 !bash scripts/setup_colab.sh
 !.venv/bin/python evolve_glp1.py --experiments 20 --no-git-commit
 ```
@@ -77,7 +79,7 @@ If Colab keeps failing due to cwd issues, missing branches, or torch not found, 
 
 ```bash
 !rm -rf /content/autoresearch
-!git clone https://github.com/YOUR_USERNAME/autoresearch.git /content/autoresearch
+!git clone https://github.com/musicofthings/autoresearch.git /content/autoresearch
 %cd /content/autoresearch
 !EXPERIMENTS=10 bash scripts/colab_bootstrap_and_run.sh
 ```

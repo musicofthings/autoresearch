@@ -32,8 +32,10 @@ fi
 
 bash scripts/setup_colab.sh
 
+RUN_PYTHON="$(cat .run_python 2>/dev/null || echo python)"
+
 # Verify interpreter and torch import before running long loop.
-.venv/bin/python - <<'PY'
+"${RUN_PYTHON}" - <<'PY'
 import sys
 import torch
 print(f"✅ python: {sys.executable}")
@@ -41,4 +43,4 @@ print(f"✅ torch: {torch.__version__}")
 print(f"✅ cuda available: {torch.cuda.is_available()}")
 PY
 
-.venv/bin/python evolve_glp1.py --experiments "${EXPERIMENTS}" --no-git-commit
+"${RUN_PYTHON}" evolve_glp1.py --experiments "${EXPERIMENTS}" --no-git-commit

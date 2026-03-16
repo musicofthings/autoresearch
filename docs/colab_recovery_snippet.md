@@ -16,5 +16,5 @@ Run this block once to recover:
 !if git show-ref --verify --quiet refs/remotes/origin/glp1-evolution; then git checkout glp1-evolution; elif git show-ref --verify --quiet refs/remotes/origin/codex/set-up-peptide-evolution-lab-using-autoresearch; then git checkout codex/set-up-peptide-evolution-lab-using-autoresearch; else echo "no GLP-1 branch found; staying on default branch"; fi
 !test -f evolve_glp1.py || (echo "evolve_glp1.py not found on this branch" && git branch -a && false)
 !bash scripts/setup_colab.sh
-!.venv/bin/python evolve_glp1.py --experiments 10 --no-git-commit
+!$(cat .run_python) evolve_glp1.py --experiments 10 --no-git-commit
 ```

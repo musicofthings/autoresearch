@@ -31,18 +31,20 @@ Use the helper script in this repo:
 ```bash
 !bash scripts/setup_colab.sh
 ```
+By default this uses Colab's active Python interpreter (`python`) to avoid venv/torch mismatches.
+If you want an isolated environment, run `!USE_VENV=1 bash scripts/setup_colab.sh`.
 
 ## 4) Run evolution
-Use `.venv/bin/python` directly (recommended in Colab because each `!` command is a new shell):
+Use `$(cat .run_python)` (written by setup script) so you always run with the same interpreter used for dependency install:
 
 Recommended smoke test (10 experiments, no git commits):
 ```bash
-!.venv/bin/python evolve_glp1.py --experiments 10 --no-git-commit
+!$(cat .run_python) evolve_glp1.py --experiments 10 --no-git-commit
 ```
 
 Full overnight run with persistent state file:
 ```bash
-!nohup .venv/bin/python evolve_glp1.py --experiments 100 --state-file runs/glp1_state.json > glp1_log.txt 2>&1 &
+!nohup $(cat .run_python) evolve_glp1.py --experiments 100 --state-file runs/glp1_state.json > glp1_log.txt 2>&1 &
 !tail -n 50 glp1_log.txt
 ```
 
@@ -50,7 +52,7 @@ Full overnight run with persistent state file:
 The script persists progress in `runs/glp1_state.json`; rerun with same `--state-file` and target.
 
 ```bash
-!.venv/bin/python evolve_glp1.py --experiments 100 --state-file runs/glp1_state.json
+!$(cat .run_python) evolve_glp1.py --experiments 100 --state-file runs/glp1_state.json
 ```
 
 ## 6) Optional: push progress to GitHub
@@ -72,7 +74,7 @@ The script persists progress in `runs/glp1_state.json`; rerun with same `--state
 !if git show-ref --verify --quiet refs/remotes/origin/glp1-evolution; then git checkout glp1-evolution; elif git show-ref --verify --quiet refs/remotes/origin/codex/set-up-peptide-evolution-lab-using-autoresearch; then git checkout codex/set-up-peptide-evolution-lab-using-autoresearch; else echo "no GLP-1 branch found; staying on default branch"; fi
 !test -f evolve_glp1.py || (echo "evolve_glp1.py not found on this branch" && git branch -a && false)
 !bash scripts/setup_colab.sh
-!.venv/bin/python evolve_glp1.py --experiments 20 --no-git-commit
+!$(cat .run_python) evolve_glp1.py --experiments 20 --no-git-commit
 ```
 
 
@@ -98,13 +100,13 @@ This wrapper script handles:
 - `cd /content` before clone
 - safe clone into `/content/autoresearch`
 - branch fallback (`glp1-evolution` -> `codex/set-up-peptide-evolution-lab-using-autoresearch` -> default)
-- dependency setup in `.venv`
-- explicit interpreter checks (`.venv/bin/python`, `torch`, CUDA)
-- starting `evolve_glp1.py` with the same venv interpreter
+- dependency setup in the selected interpreter (default: Colab `python`, optional: `.venv`)
+- explicit interpreter checks (`.run_python`, `torch`, CUDA)
+- starting `evolve_glp1.py` with the same interpreter used for install
 
 ## Troubleshooting
 - If you hit `getcwd`/`Unable to read current working directory` errors, run the recovery block in `docs/colab_recovery_snippet.md` starting with `%cd /content`.
 - If you see `pathspec 'glp1-evolution' did not match`, remove/skip hardcoded branch checkout or use the conditional checkout snippet above.
-- If you see `.venv/bin/python: No module named pip`, rerun `!bash scripts/setup_colab.sh` (script now bootstraps pip in `.venv`).
-- If you see `Missing dependency: torch`, make sure you run with `!.venv/bin/python ...`.
+- If you see `.venv/bin/python: No module named pip`, either rerun `!USE_VENV=1 bash scripts/setup_colab.sh` or use default non-venv mode (`!bash scripts/setup_colab.sh`).
+- If you see `Missing dependency: torch`, make sure you run with `!$(cat .run_python) ...` and rerun setup.
 - If CUDA is unavailable, verify runtime type is GPU and restart the Colab runtime.

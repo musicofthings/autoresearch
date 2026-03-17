@@ -11,10 +11,11 @@ torch = None
 device = None
 model = None
 MODEL_MODE = "unknown"
-ALLOW_HEURISTIC_FALLBACK = True
-PREDICTOR_MODE = "auto"  # auto|heuristic|esmfold
+ALLOW_HEURISTIC_FALLBACK = False
+PREDICTOR_MODE = "transformers"  # transformers|heuristic
 MODEL_INIT_ATTEMPTED = False
 MODEL_INIT_ERROR = None
+tokenizer = None
 
 HYDROPHOBIC = set("AILMFWVY")
 CHARGED = set("DEKRH")
@@ -55,48 +56,52 @@ def get_torch():
 
 
 def get_model():
-    global model, MODEL_MODE, MODEL_INIT_ATTEMPTED, MODEL_INIT_ERROR
-    if model is not None:
-        return model
+    global model, tokenizer, MODEL_MODE, MODEL_INIT_ATTEMPTED, MODEL_INIT_ERROR
+    if model is not None and tokenizer is not None:
+        return model, tokenizer
 
     if PREDICTOR_MODE == "heuristic":
         MODEL_MODE = "heuristic"
-        return None
+        return None, None
 
     if MODEL_INIT_ATTEMPTED:
-        if ALLOW_HEURISTIC_FALLBACK and PREDICTOR_MODE != "esmfold":
-            return None
+        if ALLOW_HEURISTIC_FALLBACK:
+            return None, None
         raise SystemExit(MODEL_INIT_ERROR)
 
     MODEL_INIT_ATTEMPTED = True
     try:
-        import esm
         get_torch()
-        loaded = esm.pretrained.esmfold_v1()
-        loaded = loaded.eval().to(device)
-        model = loaded
-        MODEL_MODE = "esmfold"
-        return model
+        from transformers import AutoTokenizer, EsmForProteinFolding
+
+        tok = AutoTokenizer.from_pretrained("facebook/esmfold_v1")
+        mdl = EsmForProteinFolding.from_pretrained(
+            "facebook/esmfold_v1",
+            low_cpu_mem_usage=True,
+        )
+        mdl = mdl.eval().to(device)
+        if device.type == "cuda":
+            mdl.esm = mdl.esm.half()
+        model = mdl
+        tokenizer = tok
+        MODEL_MODE = "esmfold_transformers"
+        return model, tokenizer
     except Exception as exc:
         missing = getattr(exc, "name", exc.__class__.__name__)
         msg = (
-            f"ESMFold initialization failed ({missing}: {exc})\n"
+            f"ESMFold(transformers) initialization failed ({missing}: {exc})\n"
             "Run:\n"
             "  bash scripts/setup_colab.sh\n"
             "Or manually install:\n"
-            "  pip install \"fair-esm[esmfold]\"\n"
-            "  pip install \"dllogger @ git+https://github.com/NVIDIA/dllogger.git\"\n"
-            "  pip install \"openfold @ git+https://github.com/deepmind/openfold.git@main\"\n"
-            "  # fallback mirror:\n"
-            "  pip install \"openfold @ git+https://github.com/aqlaboratory/openfold.git@4b41059694619831a7db195b7e0988fc4ff3a307\""
+            "  pip install transformers accelerate biopython torch"
         )
         MODEL_INIT_ERROR = msg
-        if ALLOW_HEURISTIC_FALLBACK and PREDICTOR_MODE != "esmfold":
+        if ALLOW_HEURISTIC_FALLBACK:
             MODEL_MODE = "heuristic"
             print(
                 f"⚠️ ESMFold unavailable ({missing}: {exc}); using heuristic scoring mode for this run."
             )
-            return None
+            return None, None
         raise SystemExit(msg) from exc
 
 
@@ -130,41 +135,63 @@ def run_heuristic(sequence: str):
     }
 
 
+
+def mean_plddt_from_output(output, torch_module):
+    plddt = output.plddt
+    if isinstance(plddt, (list, tuple)):
+        plddt = plddt[0]
+    if plddt.dim() == 3:
+        plddt = plddt.mean(dim=-1)
+    if plddt.dim() == 2:
+        plddt = plddt[0]
+    return plddt
+
+
 def run_esmfold(sequence: str):
     start = time.time()
     seq_clean = approx_aib(sequence)
 
-    local_model = get_model()
-    if local_model is None:
+    local_model, local_tokenizer = get_model()
+    if local_model is None or local_tokenizer is None:
         return run_heuristic(seq_clean)
 
     torch_module = get_torch()
 
     # Monomer prediction
+    mono_inputs = local_tokenizer([seq_clean], return_tensors="pt", add_special_tokens=False)
+    mono_inputs = {k: v.to(device) for k, v in mono_inputs.items()}
     with torch_module.no_grad():
-        out_mono = local_model.infer([seq_clean])[0]
-    plddt_mono = out_mono["plddt"].mean().item()
+        out_mono = local_model(**mono_inputs)
+    mono_plddt = mean_plddt_from_output(out_mono, torch_module)
+    plddt_mono = mono_plddt.mean().item()
 
     # Complex prediction (peptide + linker + ECD)
     complex_seq = seq_clean + LINKER + GLP1R_ECD
+    comp_inputs = local_tokenizer([complex_seq], return_tensors="pt", add_special_tokens=False)
+    comp_inputs = {k: v.to(device) for k, v in comp_inputs.items()}
     with torch_module.no_grad():
-        out_comp = local_model.infer([complex_seq])[0]
+        out_comp = local_model(**comp_inputs)
+    comp_plddt = mean_plddt_from_output(out_comp, torch_module)
 
-    # Interface proxy: mean PAE on first ~len(peptide) residues vs ECD part
-    pae = out_comp.get("predicted_aligned_error", torch_module.zeros(1)).mean().item()
-    interface_pae = pae  # lower = better binding
+    # Proxy for interface confidence: lower penalty when ECD side has high confidence
+    peptide_len = len(seq_clean)
+    if comp_plddt.numel() > peptide_len:
+        ecd_conf = comp_plddt[peptide_len:].mean().item()
+        interface_pae = max(1.0, min(35.0, 100.0 - ecd_conf))
+    else:
+        interface_pae = max(1.0, min(35.0, 100.0 - comp_plddt.mean().item()))
 
     runtime = time.time() - start
 
     # Simple helix proxy: average pLDDT in positions 10-30 (core helix)
-    helix_plddt = out_mono["plddt"][9:30].mean().item() if len(out_mono["plddt"]) > 30 else plddt_mono
+    helix_plddt = mono_plddt[9:30].mean().item() if mono_plddt.numel() > 30 else plddt_mono
 
     return {
         "avg_plddt": plddt_mono,
         "helix_plddt": helix_plddt,
         "interface_pae": interface_pae,
         "runtime_sec": runtime,
-        "predictor": "esmfold",
+        "predictor": "esmfold_transformers",
     }
 
 
@@ -230,14 +257,14 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=1337, help="Random seed for reproducibility.")
     parser.add_argument(
         "--predictor-mode",
-        choices=["auto", "heuristic", "esmfold"],
-        default="auto",
-        help="Predictor backend mode: auto (default), heuristic, or esmfold-only.",
+        choices=["transformers", "heuristic"],
+        default="transformers",
+        help="Predictor backend mode: transformers (default) or heuristic.",
     )
     parser.add_argument(
         "--strict-esmfold",
         action="store_true",
-        help="Fail if ESMFold dependencies are missing instead of heuristic fallback.",
+        help="Fail if transformers ESMFold dependencies are missing instead of heuristic fallback.",
     )
     return parser.parse_args()
 

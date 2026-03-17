@@ -12,6 +12,9 @@ device = None
 model = None
 MODEL_MODE = "unknown"
 ALLOW_HEURISTIC_FALLBACK = True
+PREDICTOR_MODE = "auto"  # auto|heuristic|esmfold
+MODEL_INIT_ATTEMPTED = False
+MODEL_INIT_ERROR = None
 
 HYDROPHOBIC = set("AILMFWVY")
 CHARGED = set("DEKRH")
@@ -52,9 +55,20 @@ def get_torch():
 
 
 def get_model():
-    global model, MODEL_MODE
+    global model, MODEL_MODE, MODEL_INIT_ATTEMPTED, MODEL_INIT_ERROR
     if model is not None:
         return model
+
+    if PREDICTOR_MODE == "heuristic":
+        MODEL_MODE = "heuristic"
+        return None
+
+    if MODEL_INIT_ATTEMPTED:
+        if ALLOW_HEURISTIC_FALLBACK and PREDICTOR_MODE != "esmfold":
+            return None
+        raise SystemExit(MODEL_INIT_ERROR)
+
+    MODEL_INIT_ATTEMPTED = True
     try:
         import esm
         get_torch()
@@ -65,14 +79,7 @@ def get_model():
         return model
     except Exception as exc:
         missing = getattr(exc, "name", exc.__class__.__name__)
-        if ALLOW_HEURISTIC_FALLBACK:
-            MODEL_MODE = "heuristic"
-            print(
-                f"⚠️ ESMFold unavailable ({missing}: {exc}); falling back to heuristic scoring mode. "
-                "Use setup_colab.sh to install full ESMFold dependencies."
-            )
-            return None
-        raise SystemExit(
+        msg = (
             f"ESMFold initialization failed ({missing}: {exc})\n"
             "Run:\n"
             "  bash scripts/setup_colab.sh\n"
@@ -82,7 +89,15 @@ def get_model():
             "  pip install \"openfold @ git+https://github.com/deepmind/openfold.git@main\"\n"
             "  # fallback mirror:\n"
             "  pip install \"openfold @ git+https://github.com/aqlaboratory/openfold.git@4b41059694619831a7db195b7e0988fc4ff3a307\""
-        ) from exc
+        )
+        MODEL_INIT_ERROR = msg
+        if ALLOW_HEURISTIC_FALLBACK and PREDICTOR_MODE != "esmfold":
+            MODEL_MODE = "heuristic"
+            print(
+                f"⚠️ ESMFold unavailable ({missing}: {exc}); using heuristic scoring mode for this run."
+            )
+            return None
+        raise SystemExit(msg) from exc
 
 
 
@@ -214,6 +229,12 @@ def parse_args():
     )
     parser.add_argument("--seed", type=int, default=1337, help="Random seed for reproducibility.")
     parser.add_argument(
+        "--predictor-mode",
+        choices=["auto", "heuristic", "esmfold"],
+        default="auto",
+        help="Predictor backend mode: auto (default), heuristic, or esmfold-only.",
+    )
+    parser.add_argument(
         "--strict-esmfold",
         action="store_true",
         help="Fail if ESMFold dependencies are missing instead of heuristic fallback.",
@@ -227,6 +248,7 @@ if __name__ == "__main__":
     random.seed(args.seed)
 
     ALLOW_HEURISTIC_FALLBACK = not args.strict_esmfold
+    PREDICTOR_MODE = args.predictor_mode
 
     state = load_state(args.state_file)
     best_seq = state.get("best_seq", CURRENT_SEQ)
@@ -237,6 +259,7 @@ if __name__ == "__main__":
     print("🚀 Starting GLP-1 autoresearch evolution loop (ESMFold)")
     print(f"State file: {args.state_file}")
     print(f"Starting from experiment {experiment} / {args.experiments}")
+    print(f"Predictor mode: {PREDICTOR_MODE}")
 
     while experiment < args.experiments:
         experiment += 1

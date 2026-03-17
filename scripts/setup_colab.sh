@@ -11,6 +11,7 @@ OPENFOLD_REPO="${OPENFOLD_REPO:-https://github.com/deepmind/openfold.git}"
 OPENFOLD_REF="${OPENFOLD_REF:-main}"
 OPENFOLD_FALLBACK_REPO="${OPENFOLD_FALLBACK_REPO:-https://github.com/aqlaboratory/openfold.git}"
 OPENFOLD_FALLBACK_REF="${OPENFOLD_FALLBACK_REF:-4b41059694619831a7db195b7e0988fc4ff3a307}"
+REQUIRE_ESMFOLD="${REQUIRE_ESMFOLD:-1}"
 echo "${RUN_PYTHON}" > .run_python
 
 python -m pip install --upgrade pip
@@ -50,47 +51,59 @@ else
   "${RUN_PYTHON}" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 fi
 
-# Optional ESMFold stack: best effort, keep setup non-fatal.
+# ESMFold stack installs (best effort); final import gate below enforces pass/fail.
 if ! "${RUN_PYTHON}" -m pip install "fair-esm[esmfold]" biopython; then
-  echo "⚠️ fair-esm install failed; runner can still operate in heuristic mode."
+  echo "⚠️ fair-esm install step failed"
 fi
-
 if ! "${RUN_PYTHON}" -m pip install "dllogger @ git+https://github.com/NVIDIA/dllogger.git"; then
-  echo "⚠️ dllogger install failed; ESMFold may be unavailable."
+  echo "⚠️ dllogger install step failed"
 fi
-
-# OpenFold build imports torch at setup time; disable build isolation so torch is visible.
 if ! "${RUN_PYTHON}" -m pip install --no-build-isolation "openfold @ git+${OPENFOLD_REPO}@${OPENFOLD_REF}"; then
   echo "⚠️ primary openfold install failed (${OPENFOLD_REPO}@${OPENFOLD_REF}); trying fallback mirror."
   if ! "${RUN_PYTHON}" -m pip install --no-build-isolation "openfold @ git+${OPENFOLD_FALLBACK_REPO}@${OPENFOLD_FALLBACK_REF}"; then
     echo "⚠️ fallback openfold install failed; trying fallback mirror head."
     if ! "${RUN_PYTHON}" -m pip install --no-build-isolation "openfold @ git+${OPENFOLD_FALLBACK_REPO}"; then
-      echo "⚠️ openfold install failed; runner can still operate in heuristic mode."
+      echo "⚠️ openfold install failed"
     fi
   fi
 fi
 
 # Verify imports from same interpreter used for run.
-# torch is required; esm/openfold are optional because runtime can fallback.
-"${RUN_PYTHON}" - <<'PY'
+STATUS=0
+"${RUN_PYTHON}" - <<'PY' || STATUS=$?
 import sys
 import torch
 print(f"✅ python executable: {sys.executable}")
 print(f"✅ torch import ok ({torch.__version__})")
 print(f"✅ cuda available: {torch.cuda.is_available()}")
 
+esm_ok = True
+openfold_ok = True
+
 try:
     import esm
     print(f"✅ esm import ok ({getattr(esm, '__version__', 'unknown')})")
 except Exception as e:
+    esm_ok = False
     print(f"⚠️ esm import unavailable: {e}")
 
 try:
     import openfold
     print(f"✅ openfold import ok ({getattr(openfold, '__version__', 'unknown')})")
 except Exception as e:
+    openfold_ok = False
     print(f"⚠️ openfold import unavailable: {e}")
+
+if not (esm_ok and openfold_ok):
+    raise SystemExit(42)
 PY
 
 echo "${RUN_PYTHON}" > .run_python
-echo "✅ Setup complete. Run with: $(cat .run_python 2>/dev/null || echo python) evolve_glp1.py --experiments 10 --no-git-commit"
+if [ "${STATUS}" -eq 42 ] && [ "${REQUIRE_ESMFOLD}" = "1" ]; then
+  echo "❌ ESMFold stack not ready (esm/openfold import failed)."
+  echo "   Fix environment and re-run: bash scripts/setup_colab.sh"
+  echo "   If you intentionally want heuristic mode, run: REQUIRE_ESMFOLD=0 bash scripts/setup_colab.sh"
+  exit 1
+fi
+
+echo "✅ Setup complete. Run with: $(cat .run_python 2>/dev/null || echo python) evolve_glp1.py --strict-esmfold --experiments 10 --no-git-commit"

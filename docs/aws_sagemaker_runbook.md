@@ -45,7 +45,7 @@ Notes:
 ## 5) Run a smoke experiment
 ```bash
 RUN_PYTHON="$(cat .run_python 2>/dev/null || echo python)"
-"${RUN_PYTHON}" evolve_glp1.py --experiments 5 --no-git-commit
+"${RUN_PYTHON}" evolve_glp1.py --strict-esmfold --experiments 5 --no-git-commit
 ```
 
 ## 6) Run long experiment in background

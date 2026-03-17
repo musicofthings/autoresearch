@@ -30,12 +30,12 @@ Use the full guide in `docs/glp1_colab_option1.md`. Minimal flow:
 !if git show-ref --verify --quiet refs/remotes/origin/glp1-evolution; then git checkout glp1-evolution; elif git show-ref --verify --quiet refs/remotes/origin/codex/set-up-peptide-evolution-lab-using-autoresearch; then git checkout codex/set-up-peptide-evolution-lab-using-autoresearch; else echo "no GLP-1 branch found; staying on default branch"; fi
 !test -f evolve_glp1.py || (echo "evolve_glp1.py not found on this branch" && git branch -a && false)
 !bash scripts/setup_colab.sh
-!$(cat .run_python 2>/dev/null || echo python) evolve_glp1.py --experiments 10 --no-git-commit
+!$(cat .run_python 2>/dev/null || echo python) evolve_glp1.py --strict-esmfold --experiments 10 --no-git-commit
 ```
 
 For longer runs, keep the default `--state-file runs/glp1_state.json` so reconnects can resume from the last completed experiment.
 
-`setup_colab.sh` writes the interpreter to `.run_python`; use `$(cat .run_python 2>/dev/null || echo python)` for all runs. Default mode uses Colab system Python for reliability and best-effort installs the ESMFold stack (`fair-esm`, `dllogger`, `openfold`) while always enabling run continuity. Set `USE_VENV=1` only if you specifically need an isolated venv. If `.run_python` is ever missing, the fallback still runs with `python`.
+`setup_colab.sh` writes the interpreter to `.run_python`; use `$(cat .run_python 2>/dev/null || echo python)` for all runs. Default mode uses Colab system Python for reliability and installs the ESMFold stack (`fair-esm`, `dllogger`, `openfold`). Setup enforces ESMFold readiness by default (`REQUIRE_ESMFOLD=1`). Set `USE_VENV=1` only if you specifically need an isolated venv. If `.run_python` is ever missing, the fallback still runs with `python`.
 
 
 ### One-command Colab bootstrap (recommended when setup keeps looping)
@@ -70,7 +70,7 @@ git clone https://github.com/musicofthings/autoresearch.git
 cd autoresearch
 bash scripts/setup_colab.sh
 RUN_PYTHON="$(cat .run_python 2>/dev/null || echo python)"
-"${RUN_PYTHON}" evolve_glp1.py --experiments 5 --no-git-commit
+"${RUN_PYTHON}" evolve_glp1.py --strict-esmfold --experiments 5 --no-git-commit
 ```
 
 ## Local run (GPU machine)
@@ -84,7 +84,7 @@ $(cat .run_python 2>/dev/null || echo python) evolve_glp1.py --experiments 100 -
 
 - A CUDA GPU is strongly recommended for practical ESMFold throughput.
 - The script prints clear install guidance if `torch`, `openfold`, or `fair-esm[esmfold]` is missing.
-- If ESMFold dependencies (`fair-esm`, `openfold`) remain unavailable, `evolve_glp1.py` automatically falls back to heuristic scoring mode (`Predictor=heuristic`) so runs can proceed. Use `--strict-esmfold` to fail instead of fallback.
+- By default, setup enforces ESMFold availability (`REQUIRE_ESMFOLD=1`) and exits if `esm/openfold` cannot be imported. For intentional fallback mode only, run setup with `REQUIRE_ESMFOLD=0`.
 
 ## License
 

@@ -52,6 +52,25 @@ This command avoids the common Colab loop (wrong cwd, missing branch, torch inst
 
 If your notebook is already in a broken cwd state (`getcwd` errors), run the recovery block in `docs/colab_recovery_snippet.md`.
 
+
+## AWS SageMaker (recommended if Colab is unstable)
+
+If Colab keeps interrupting your runs, use SageMaker GPU notebooks for more stable sessions.
+
+- Full runbook: `docs/aws_sagemaker_runbook.md`
+
+Minimal sequence:
+
+```bash
+cd /home/ec2-user/SageMaker
+rm -rf autoresearch
+git clone https://github.com/musicofthings/autoresearch.git
+cd autoresearch
+bash scripts/setup_colab.sh
+RUN_PYTHON="$(cat .run_python 2>/dev/null || echo python)"
+"${RUN_PYTHON}" evolve_glp1.py --experiments 5 --no-git-commit
+```
+
 ## Local run (GPU machine)
 
 ```bash

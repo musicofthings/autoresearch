@@ -79,6 +79,8 @@ def get_model():
             "Or manually install:\n"
             "  pip install \"fair-esm[esmfold]\"\n"
             "  pip install \"dllogger @ git+https://github.com/NVIDIA/dllogger.git\"\n"
+            "  pip install \"openfold @ git+https://github.com/deepmind/openfold.git@main\"\n"
+            "  # fallback mirror:\n"
             "  pip install \"openfold @ git+https://github.com/aqlaboratory/openfold.git@4b41059694619831a7db195b7e0988fc4ff3a307\""
         ) from exc
 

@@ -1,15 +1,35 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Colab reliability mode:
-# - default USE_VENV=0 to avoid interpreter mismatch
+# Reliability modes:
+# - default USE_VENV=0
 # - set USE_VENV=1 for isolated deps in .venv
+# - on Python >=3.12, auto-switch to USE_VENV=1 (Python 3.10) for OpenFold compatibility
 USE_VENV="${USE_VENV:-0}"
 RUN_PYTHON="python"
+OPENFOLD_REPO="${OPENFOLD_REPO:-https://github.com/deepmind/openfold.git}"
+OPENFOLD_REF="${OPENFOLD_REF:-main}"
+OPENFOLD_FALLBACK_REPO="${OPENFOLD_FALLBACK_REPO:-https://github.com/aqlaboratory/openfold.git}"
+OPENFOLD_FALLBACK_REF="${OPENFOLD_FALLBACK_REF:-4b41059694619831a7db195b7e0988fc4ff3a307}"
 echo "${RUN_PYTHON}" > .run_python
 
 python -m pip install --upgrade pip
 python -m pip install --upgrade uv
+
+PYVER=$(python - <<'PY'
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}")
+PY
+)
+
+if [ "${USE_VENV}" = "0" ] && python - <<'PY' >/dev/null 2>&1
+import sys
+raise SystemExit(0 if sys.version_info >= (3, 12) else 1)
+PY
+then
+  echo "ℹ️ Detected Python ${PYVER}; enabling USE_VENV=1 for OpenFold compatibility."
+  USE_VENV="1"
+fi
 
 if [ "${USE_VENV}" = "1" ]; then
   if [ -d ".venv" ]; then
@@ -20,7 +40,7 @@ if [ "${USE_VENV}" = "1" ]; then
   RUN_PYTHON=".venv/bin/python"
   echo "${RUN_PYTHON}" > .run_python
   "${RUN_PYTHON}" -m ensurepip --upgrade >/dev/null 2>&1 || true
-  uv pip install --python "${RUN_PYTHON}" --upgrade pip
+  uv pip install --python "${RUN_PYTHON}" --upgrade pip setuptools wheel
 fi
 
 # Core runtime deps (required)
@@ -30,7 +50,7 @@ else
   "${RUN_PYTHON}" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 fi
 
-# Optional ESMFold stack: try best effort, but do not fail setup if this step fails.
+# Optional ESMFold stack: best effort, keep setup non-fatal.
 if ! "${RUN_PYTHON}" -m pip install "fair-esm[esmfold]" biopython; then
   echo "⚠️ fair-esm install failed; runner can still operate in heuristic mode."
 fi
@@ -39,10 +59,14 @@ if ! "${RUN_PYTHON}" -m pip install "dllogger @ git+https://github.com/NVIDIA/dl
   echo "⚠️ dllogger install failed; ESMFold may be unavailable."
 fi
 
-if ! "${RUN_PYTHON}" -m pip install "openfold @ git+https://github.com/aqlaboratory/openfold.git@4b41059694619831a7db195b7e0988fc4ff3a307"; then
-  echo "⚠️ pinned openfold install failed; trying fallback openfold head."
-  if ! "${RUN_PYTHON}" -m pip install "openfold @ git+https://github.com/aqlaboratory/openfold.git"; then
-    echo "⚠️ openfold install failed; runner can still operate in heuristic mode."
+# OpenFold build imports torch at setup time; disable build isolation so torch is visible.
+if ! "${RUN_PYTHON}" -m pip install --no-build-isolation "openfold @ git+${OPENFOLD_REPO}@${OPENFOLD_REF}"; then
+  echo "⚠️ primary openfold install failed (${OPENFOLD_REPO}@${OPENFOLD_REF}); trying fallback mirror."
+  if ! "${RUN_PYTHON}" -m pip install --no-build-isolation "openfold @ git+${OPENFOLD_FALLBACK_REPO}@${OPENFOLD_FALLBACK_REF}"; then
+    echo "⚠️ fallback openfold install failed; trying fallback mirror head."
+    if ! "${RUN_PYTHON}" -m pip install --no-build-isolation "openfold @ git+${OPENFOLD_FALLBACK_REPO}"; then
+      echo "⚠️ openfold install failed; runner can still operate in heuristic mode."
+    fi
   fi
 fi
 
@@ -69,4 +93,4 @@ except Exception as e:
 PY
 
 echo "${RUN_PYTHON}" > .run_python
-echo "✅ Colab setup complete. Run with: $(cat .run_python 2>/dev/null || echo python) evolve_glp1.py --experiments 10 --no-git-commit"
+echo "✅ Setup complete. Run with: $(cat .run_python 2>/dev/null || echo python) evolve_glp1.py --experiments 10 --no-git-commit"

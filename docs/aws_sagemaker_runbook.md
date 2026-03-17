@@ -38,6 +38,10 @@ RUN_PYTHON="$(cat .run_python 2>/dev/null || echo python)"
 "${RUN_PYTHON}" -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 ```
 
+Notes:
+- On SageMaker images with Python 3.12, setup auto-switches to a Python 3.10 `.venv` for better OpenFold compatibility.
+- OpenFold install is attempted with `--no-build-isolation` so torch is visible during build.
+
 ## 5) Run a smoke experiment
 ```bash
 RUN_PYTHON="$(cat .run_python 2>/dev/null || echo python)"
@@ -74,4 +78,10 @@ RUN_PYTHON="$(cat .run_python 2>/dev/null || echo python)"
 git add runs/glp1_state.json glp1_log.txt || true
 git commit -m "SageMaker checkpoint" || true
 git push origin HEAD
+```
+
+
+## Optional: override OpenFold repo/ref
+```bash
+OPENFOLD_REPO=https://github.com/deepmind/openfold.git OPENFOLD_REF=main bash scripts/setup_colab.sh
 ```

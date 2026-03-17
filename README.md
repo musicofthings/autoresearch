@@ -57,6 +57,8 @@ If your notebook is already in a broken cwd state (`getcwd` errors), run the rec
 
 If Colab keeps interrupting your runs, use SageMaker GPU notebooks for more stable sessions.
 
+On SageMaker Python 3.12 images, setup auto-switches to a Python 3.10 `.venv` for OpenFold compatibility.
+
 - Full runbook: `docs/aws_sagemaker_runbook.md`
 
 Minimal sequence:

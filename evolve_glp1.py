@@ -88,7 +88,7 @@ def run_esmfold(sequence: str):
         out_comp = local_model.infer([complex_seq])[0]
 
     # Interface proxy: mean PAE on first ~len(peptide) residues vs ECD part
-    pae = out_comp.get("predicted_aligned_error", torch_module.zeros(1)).mean().item()
+    pae = out_comp.get("predicted_aligned_error", torch_module.full((1,), 30.0)).mean().item()
     interface_pae = pae  # lower = better binding
 
     runtime = time.time() - start

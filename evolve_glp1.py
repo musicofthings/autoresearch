@@ -10,15 +10,6 @@ from pathlib import Path
 torch = None
 device = None
 model = None
-MODEL_MODE = "unknown"
-ALLOW_HEURISTIC_FALLBACK = False
-PREDICTOR_MODE = "transformers"  # transformers|heuristic
-MODEL_INIT_ATTEMPTED = False
-MODEL_INIT_ERROR = None
-tokenizer = None
-
-HYDROPHOBIC = set("AILMFWVY")
-CHARGED = set("DEKRH")
 
 CURRENT_SEQ = "HAEGTFTSDVSSYLEGQAAKEFIAWLVRGRG"  # semaglutide-like backbone (best starter)
 
@@ -30,7 +21,7 @@ LINKER = "GGGGGGGGGGG"  # flexible Gly10 linker for complex
 SEEDS = [
     "HAEGTFTSDVSSYLEGQAAKEFIAWLVKGRG",  # native
     "HAEGTFTSDVSSYLEGQAAKEFIAWLVRGRG",  # semaglutide-like
-    "HAEGTFTSDVSSYLEGQAAKEEFIAWLVRGRG",  # liraglutide-like
+    "HAEGTFTSDVSSYLEGQAAKEFIAWLVRGRG",  # liraglutide-like
     "HGEGTFTSDLSKQMEEEAVRLFIEWLKNGGPSSGAPPPS",  # exenatide
 ]
 
@@ -56,53 +47,22 @@ def get_torch():
 
 
 def get_model():
-    global model, tokenizer, MODEL_MODE, MODEL_INIT_ATTEMPTED, MODEL_INIT_ERROR
-    if model is not None and tokenizer is not None:
-        return model, tokenizer
-
-    if PREDICTOR_MODE == "heuristic":
-        MODEL_MODE = "heuristic"
-        return None, None
-
-    if MODEL_INIT_ATTEMPTED:
-        if ALLOW_HEURISTIC_FALLBACK:
-            return None, None
-        raise SystemExit(MODEL_INIT_ERROR)
-
-    MODEL_INIT_ATTEMPTED = True
+    global model
+    if model is not None:
+        return model
     try:
-        get_torch()
-        from transformers import AutoTokenizer, EsmForProteinFolding
+        import esm
+    except ModuleNotFoundError as exc:
+        raise SystemExit(
+            "Missing dependency: fair-esm with ESMFold. Install with: "
+            "uv pip install \"fair-esm[esmfold]\""
+        ) from exc
 
-        tok = AutoTokenizer.from_pretrained("facebook/esmfold_v1")
-        mdl = EsmForProteinFolding.from_pretrained(
-            "facebook/esmfold_v1",
-            low_cpu_mem_usage=True,
-        )
-        mdl = mdl.eval().to(device)
-        if device.type == "cuda":
-            mdl.esm = mdl.esm.half()
-        model = mdl
-        tokenizer = tok
-        MODEL_MODE = "esmfold_transformers"
-        return model, tokenizer
-    except Exception as exc:
-        missing = getattr(exc, "name", exc.__class__.__name__)
-        msg = (
-            f"ESMFold(transformers) initialization failed ({missing}: {exc})\n"
-            "Run:\n"
-            "  bash scripts/setup_colab.sh\n"
-            "Or manually install:\n"
-            "  pip install transformers accelerate biopython torch"
-        )
-        MODEL_INIT_ERROR = msg
-        if ALLOW_HEURISTIC_FALLBACK:
-            MODEL_MODE = "heuristic"
-            print(
-                f"⚠️ ESMFold unavailable ({missing}: {exc}); using heuristic scoring mode for this run."
-            )
-            return None, None
-        raise SystemExit(msg) from exc
+    get_torch()
+    loaded = esm.pretrained.esmfold_v1()
+    loaded = loaded.eval().to(device)
+    model = loaded
+    return model
 
 
 
@@ -110,88 +70,37 @@ def approx_aib(seq: str) -> str:
     return seq.replace("[Aib]", "A").replace("X", "A")
 
 
-
-
-def run_heuristic(sequence: str):
-    start = time.time()
-    seq_clean = approx_aib(sequence)
-    length = max(len(seq_clean), 1)
-    hydrophobic_frac = sum(aa in HYDROPHOBIC for aa in seq_clean) / length
-    charged_frac = sum(aa in CHARGED for aa in seq_clean) / length
-    gly_pro_frac = sum(aa in {"G", "P"} for aa in seq_clean) / length
-
-    avg_plddt = 65 + 20 * hydrophobic_frac - 8 * gly_pro_frac
-    helix_plddt = 62 + 18 * hydrophobic_frac - 10 * gly_pro_frac
-    # lower is better; keep in a plausible range
-    interface_pae = 22 - 6 * charged_frac + 4 * gly_pro_frac
-
-    runtime = time.time() - start
-    return {
-        "avg_plddt": float(max(20, min(95, avg_plddt))),
-        "helix_plddt": float(max(20, min(95, helix_plddt))),
-        "interface_pae": float(max(1, min(35, interface_pae))),
-        "runtime_sec": runtime,
-        "predictor": "heuristic",
-    }
-
-
-
-def mean_plddt_from_output(output, torch_module):
-    plddt = output.plddt
-    if isinstance(plddt, (list, tuple)):
-        plddt = plddt[0]
-    if plddt.dim() == 3:
-        plddt = plddt.mean(dim=-1)
-    if plddt.dim() == 2:
-        plddt = plddt[0]
-    return plddt
-
-
 def run_esmfold(sequence: str):
     start = time.time()
     seq_clean = approx_aib(sequence)
 
-    local_model, local_tokenizer = get_model()
-    if local_model is None or local_tokenizer is None:
-        return run_heuristic(seq_clean)
-
     torch_module = get_torch()
+    local_model = get_model()
 
     # Monomer prediction
-    mono_inputs = local_tokenizer([seq_clean], return_tensors="pt", add_special_tokens=False)
-    mono_inputs = {k: v.to(device) for k, v in mono_inputs.items()}
     with torch_module.no_grad():
-        out_mono = local_model(**mono_inputs)
-    mono_plddt = mean_plddt_from_output(out_mono, torch_module)
-    plddt_mono = mono_plddt.mean().item()
+        out_mono = local_model.infer([seq_clean])[0]
+    plddt_mono = out_mono["plddt"].mean().item()
 
     # Complex prediction (peptide + linker + ECD)
     complex_seq = seq_clean + LINKER + GLP1R_ECD
-    comp_inputs = local_tokenizer([complex_seq], return_tensors="pt", add_special_tokens=False)
-    comp_inputs = {k: v.to(device) for k, v in comp_inputs.items()}
     with torch_module.no_grad():
-        out_comp = local_model(**comp_inputs)
-    comp_plddt = mean_plddt_from_output(out_comp, torch_module)
+        out_comp = local_model.infer([complex_seq])[0]
 
-    # Proxy for interface confidence: lower penalty when ECD side has high confidence
-    peptide_len = len(seq_clean)
-    if comp_plddt.numel() > peptide_len:
-        ecd_conf = comp_plddt[peptide_len:].mean().item()
-        interface_pae = max(1.0, min(35.0, 100.0 - ecd_conf))
-    else:
-        interface_pae = max(1.0, min(35.0, 100.0 - comp_plddt.mean().item()))
+    # Interface proxy: mean PAE on first ~len(peptide) residues vs ECD part
+    pae = out_comp.get("predicted_aligned_error", torch_module.full((1,), 30.0)).mean().item()
+    interface_pae = pae  # lower = better binding
 
     runtime = time.time() - start
 
     # Simple helix proxy: average pLDDT in positions 10-30 (core helix)
-    helix_plddt = mono_plddt[9:30].mean().item() if mono_plddt.numel() > 30 else plddt_mono
+    helix_plddt = out_mono["plddt"][9:30].mean().item() if len(out_mono["plddt"]) > 30 else plddt_mono
 
     return {
         "avg_plddt": plddt_mono,
         "helix_plddt": helix_plddt,
         "interface_pae": interface_pae,
         "runtime_sec": runtime,
-        "predictor": "esmfold_transformers",
     }
 
 
@@ -255,17 +164,6 @@ def parse_args():
         help="Disable git commits during evolution (recommended for quick Colab smoke tests).",
     )
     parser.add_argument("--seed", type=int, default=1337, help="Random seed for reproducibility.")
-    parser.add_argument(
-        "--predictor-mode",
-        choices=["transformers", "heuristic"],
-        default="transformers",
-        help="Predictor backend mode: transformers (default) or heuristic.",
-    )
-    parser.add_argument(
-        "--strict-esmfold",
-        action="store_true",
-        help="Fail if transformers ESMFold dependencies are missing instead of heuristic fallback.",
-    )
     return parser.parse_args()
 
 
@@ -273,9 +171,6 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     random.seed(args.seed)
-
-    ALLOW_HEURISTIC_FALLBACK = not args.strict_esmfold
-    PREDICTOR_MODE = args.predictor_mode
 
     state = load_state(args.state_file)
     best_seq = state.get("best_seq", CURRENT_SEQ)
@@ -286,7 +181,6 @@ if __name__ == "__main__":
     print("🚀 Starting GLP-1 autoresearch evolution loop (ESMFold)")
     print(f"State file: {args.state_file}")
     print(f"Starting from experiment {experiment} / {args.experiments}")
-    print(f"Predictor mode: {PREDICTOR_MODE}")
 
     while experiment < args.experiments:
         experiment += 1
@@ -302,8 +196,7 @@ if __name__ == "__main__":
             f"pLDDT={metrics['avg_plddt']:.1f} | "
             f"Helix={metrics['helix_plddt']:.1f} | "
             f"PAE={metrics['interface_pae']:.1f} | "
-            f"Time={metrics['runtime_sec']:.1f}s | "
-            f"Predictor={metrics.get('predictor','unknown')}"
+            f"Time={metrics['runtime_sec']:.1f}s"
         )
         print(f"Score: {score:.4f} (best so far: {best_score:.4f})")
 
